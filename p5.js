@@ -1,23 +1,22 @@
 /* =========================================================================
-   IRELAND CONFLICT - TEXT SWARM (MAX SPEED MODE)
+   IRELAND CONFLICT - SWARM (CLICK TO SCATTER)
 ========================================================================= */
-
-const WORDS = [
-  'PEACE', 'DERRY', 'BELFAST', 'WALLS', 'DIVIDE',
-  'HOPE', 'TROUBLES', 'HISTORY', 'AGREEMENT', 'FUTURE'
-];
 
 const CFG = {
   TIME: 0.75,
-  COUNT: 1000,     // Lower count = Much higher speed
+  COUNT: 2500,
   SPEED: 12,
   FORCE: 0.6,
   CHAOS: 0.8,
   EDGE: 50,
-  MIN: 14, MAX: 24 // Bigger text to fill the gaps
+  MIN: 4, MAX: 8,
+  SCATTER_FORCE: 20, // How hard they explode away
+  SCATTER_TIME: 500  // How long the explosion lasts (ms)
 };
 
-let imgs = [], active, idx = 0, timer = 0, tOff = 0, parts = [];
+let imgs = [], active, idx = 0, slideTimer = 0, tOff = 0, parts = [];
+let isScattering = false;
+let scatterTimer = 0;
 
 function preload() {
   const files = [
@@ -29,11 +28,10 @@ function preload() {
 }
 
 function setup() {
-  // CRITICAL PERFORMANCE FIX:
-  // Forces 1 pixel density. Prevents lag on Retina/4K screens.
+  // Optimization settings
   pixelDensity(1);
-
   createCanvas(windowWidth, windowHeight);
+  noSmooth();
 
   imgs.forEach(img => {
     if (img) {
@@ -44,13 +42,8 @@ function setup() {
 
   active = imgs[0];
   parts = Array.from({ length: CFG.COUNT }, (_, i) => new Particle(i));
-
-  textAlign(CENTER, CENTER);
-  textFont('Arial');
-  textStyle(BOLD);
   noStroke();
-
-  timer = millis();
+  slideTimer = millis();
 }
 
 function draw() {
@@ -59,17 +52,31 @@ function draw() {
   tOff += 0.01;
   const target = createVector(mouseX, mouseY);
 
-  if (millis() > timer + (CFG.TIME * 1000)) {
+  // --- 1. SLIDESHOW LOGIC ---
+  if (millis() > slideTimer + (CFG.TIME * 1000)) {
     idx = (idx + 1) % imgs.length;
     active = imgs[idx];
-    timer = millis();
+    slideTimer = millis();
   }
 
+  // --- 2. SCATTER LOGIC ---
+  // If we clicked recently, check if time is up
+  if (isScattering && millis() > scatterTimer + CFG.SCATTER_TIME) {
+    isScattering = false; // Stop scattering, return to normal
+  }
+
+  // --- 3. UPDATE PARTICLES ---
   for (let p of parts) {
     p.behaviors(target);
     p.update();
     p.show(active);
   }
+}
+
+// --- MOUSE CLICK TRIGGER ---
+function mousePressed() {
+  isScattering = true;
+  scatterTimer = millis(); // Start the countdown
 }
 
 class Particle {
@@ -79,17 +86,33 @@ class Particle {
     this.acc = createVector();
     this.id = id;
     this.sz = random(CFG.MIN, CFG.MAX);
-
-    let rWord = WORDS[Math.floor(random(WORDS.length))];
-    this.char = rWord.charAt(Math.floor(random(rWord.length))) || "A";
   }
 
   behaviors(target) {
-    let seek = p5.Vector.sub(target, this.pos).setMag(CFG.SPEED).sub(this.vel).limit(CFG.FORCE);
+    let seek;
+
+    // --- DECIDE: SEEK OR SCATTER? ---
+    if (isScattering) {
+      // SCATTER: Calculate vector pointing AWAY from mouse
+      let dir = p5.Vector.sub(this.pos, target); // Direction = Me minus Mouse
+      dir.setMag(CFG.SCATTER_FORCE); // Set to explosion speed
+
+      // Override steering logic: apply massive force immediately
+      seek = dir;
+    } else {
+      // NORMAL: Seek the mouse
+      let desired = p5.Vector.sub(target, this.pos);
+      desired.setMag(CFG.SPEED);
+      seek = p5.Vector.sub(desired, this.vel);
+      seek.limit(CFG.FORCE);
+    }
+
+    // Chaos Force (Noise)
     let nX = noise(this.id, tOff), nY = noise(this.id + 1000, tOff);
     let chaos = createVector(map(nX, 0, 1, -1, 1), map(nY, 0, 1, -1, 1)).mult(CFG.CHAOS);
-    let b = createVector();
 
+    // Wall Repulsion
+    let b = createVector();
     if (this.pos.x < CFG.EDGE) b.x = CFG.SPEED;
     else if (this.pos.x > width - CFG.EDGE) b.x = -CFG.SPEED;
     if (this.pos.y < CFG.EDGE) b.y = CFG.SPEED;
@@ -100,26 +123,27 @@ class Particle {
   }
 
   update() {
-    this.vel.add(this.acc).limit(CFG.SPEED);
+    // If scattering, we allow them to move faster than normal limit
+    let limit = isScattering ? CFG.SCATTER_FORCE : CFG.SPEED;
+
+    this.vel.add(this.acc).limit(limit);
     this.pos.add(this.vel);
     this.acc.mult(0);
   }
 
   show(img) {
-    // Rounding to whole numbers is faster for canvas rendering
     let x = Math.floor(this.pos.x);
     let y = Math.floor(this.pos.y);
 
     if (x < 0 || x >= width || y < 0 || y >= height) return;
 
-    // Optimized pixel array access
+    // Fast pixel lookup
     let index = (y * img.width + x) * 4;
     let r = img.pixels[index];
     let g = img.pixels[index + 1];
     let b = img.pixels[index + 2];
 
     fill(r, g, b);
-    textSize(this.sz);
-    text(this.char, x, y);
+    square(this.pos.x, this.pos.y, this.sz);
   }
 }
