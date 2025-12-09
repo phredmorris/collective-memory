@@ -4,14 +4,14 @@
 =========================================================================
 */
 
-const CFG = { 
-  TIME: 0.75,       
-  COUNT: 2500,      
-  SPEED: 12,        
-  FORCE: 0.6,       
-  CHAOS: 0.8,       
-  EDGE: 50,         
-  MIN: 4, MAX: 8,   
+const CFG = {
+  TIME: 0.75,
+  COUNT: 2500,
+  SPEED: 12,
+  FORCE: 0.6,
+  CHAOS: 0.8,
+  EDGE: 50,
+  MIN: 4, MAX: 8,
 
   // --- ADJUST THESE TWO NUMBERS ---
   SCATTER_FORCE: 15,  // Lowered from 25 (So they fly slower)
